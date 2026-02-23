@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "antaris-memory"
+version = "1.0.0"
+description = "File-based persistent memory for AI agents. Zero dependencies."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Antaris Analytics", email = "dev@antarisanalytics.com"}
+]
+keywords = ["ai", "memory", "agents", "llm", "persistence", "recall"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/Antaris-Analytics/antaris-memory"
+Documentation = "https://memory.antarisanalytics.ai"
+Repository = "https://github.com/Antaris-Analytics/antaris-memory"
+
+[project.optional-dependencies]
+embeddings = ["openai>=1.0"]
+mcp = ["mcp>=1.0"]
+semantic = ["sentence-transformers>=2.0"]
+all = ["openai>=1.0", "mcp>=1.0"]
+pro = ["openai>=1.0", "mcp>=1.0", "sentence-transformers>=2.0"]
+
+[project.scripts]
+antaris-memory-mcp = "antaris_memory.mcp_server:main"
+
+[tool.setuptools.packages.find]
+include = ["antaris_memory*"]

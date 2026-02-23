@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "antaris-context"
+version = "1.0.0"
+description = "Context window optimization for AI agents. Zero dependencies."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Antaris Analytics", email = "dev@antarisanalytics.com"}
+]
+keywords = ["ai", "context", "optimization", "tokens", "agents", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/Antaris-Analytics/antaris-context"
+Repository = "https://github.com/Antaris-Analytics/antaris-context"
+
+[tool.setuptools.packages.find]
+include = ["antaris_context*"]

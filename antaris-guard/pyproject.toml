@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "antaris-guard"
+version = "1.0.0"
+description = "Security and prompt injection detection for AI agents. Zero dependencies."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Antaris Analytics", email = "dev@antarisanalytics.com"}
+]
+keywords = ["security", "ai", "prompt-injection", "pii", "content-filtering", "rate-limiting"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.0.0"]
+
+[project.scripts]
+antaris-guard-mcp = "antaris_guard.mcp_server:main"
+
+[project.urls]
+Homepage = "https://github.com/Antaris-Analytics/antaris-guard"
+Repository = "https://github.com/Antaris-Analytics/antaris-guard"
+
+[tool.setuptools.packages.find]
+include = ["antaris_guard*"]

@@ -1,0 +1,117 @@
+{
+  "timestamp": 1771295014.76853,
+  "results": {
+    "Context Window - Add Content": {
+      "avg_time_ms": 0.0013559323851950467,
+      "min_time_ms": 0.0012909877113997936,
+      "max_time_ms": 0.005124951712787151,
+      "std_dev_ms": 0.00013145306746186107,
+      "ops_per_sec": 737499.9011150198,
+      "total_iterations": 1000
+    },
+    "Context Window - Get Usage Report": {
+      "avg_time_ms": 0.0035184775479137897,
+      "min_time_ms": 0.003374996595084667,
+      "max_time_ms": 0.008292030543088913,
+      "std_dev_ms": 0.00017371265374430163,
+      "ops_per_sec": 284213.83578045847,
+      "total_iterations": 1000
+    },
+    "Context Window - Clear Section": {
+      "avg_time_ms": 0.0014127911999821663,
+      "min_time_ms": 0.0013329554349184036,
+      "max_time_ms": 0.0015830155462026596,
+      "std_dev_ms": 3.1305580108036714e-05,
+      "ops_per_sec": 707818.6783812237,
+      "total_iterations": 1000
+    },
+    "Message Compressor - Light": {
+      "avg_time_ms": 0.015955844952259213,
+      "min_time_ms": 0.014541030395776033,
+      "max_time_ms": 0.02583395689725876,
+      "std_dev_ms": 0.001003031921801337,
+      "ops_per_sec": 62672.95796568946,
+      "total_iterations": 1000
+    },
+    "Message Compressor - Moderate": {
+      "avg_time_ms": 0.05015919520519674,
+      "min_time_ms": 0.04479201743379235,
+      "max_time_ms": 0.05779101047664881,
+      "std_dev_ms": 0.002748644459062236,
+      "ops_per_sec": 19936.524019356577,
+      "total_iterations": 1000
+    },
+    "Message Compressor - Aggressive": {
+      "avg_time_ms": 0.07327339152107015,
+      "min_time_ms": 0.06495899287983775,
+      "max_time_ms": 0.10004098294302821,
+      "std_dev_ms": 0.004798946933339266,
+      "ops_per_sec": 13647.518959354362,
+      "total_iterations": 1000
+    },
+    "Strategy - Recency Selection": {
+      "avg_time_ms": 0.001417100487742573,
+      "min_time_ms": 0.0012919772416353226,
+      "max_time_ms": 0.0062909675762057304,
+      "std_dev_ms": 0.00016500760996099662,
+      "ops_per_sec": 705666.2591323993,
+      "total_iterations": 1000
+    },
+    "Strategy - Relevance Selection": {
+      "avg_time_ms": 0.016931680962443352,
+      "min_time_ms": 0.016707985196262598,
+      "max_time_ms": 0.018666964024305344,
+      "std_dev_ms": 9.638648616608418e-05,
+      "ops_per_sec": 59060.88132762061,
+      "total_iterations": 1000
+    },
+    "Strategy - Hybrid Selection": {
+      "avg_time_ms": 0.02004285156726837,
+      "min_time_ms": 0.01979200169444084,
+      "max_time_ms": 0.02704095095396042,
+      "std_dev_ms": 0.0002753773609560184,
+      "ops_per_sec": 49893.10012319217,
+      "total_iterations": 1000
+    },
+    "Context Manager - Add Content": {
+      "avg_time_ms": 0.04613607790088281,
+      "min_time_ms": 0.040000013541430235,
+      "max_time_ms": 0.05612499080598354,
+      "std_dev_ms": 0.0027363003585489072,
+      "ops_per_sec": 21675.01108673273,
+      "total_iterations": 1000
+    },
+    "Context Manager - Optimize Context": {
+      "avg_time_ms": 0.06406882702140138,
+      "min_time_ms": 0.05804200191050768,
+      "max_time_ms": 0.10895804734900594,
+      "std_dev_ms": 0.0032635401053092727,
+      "ops_per_sec": 15608.214579392295,
+      "total_iterations": 1000
+    },
+    "Context Profiler - Analyze Window": {
+      "avg_time_ms": 0.013550757081247866,
+      "min_time_ms": 0.01329102087765932,
+      "max_time_ms": 0.01999997766688466,
+      "std_dev_ms": 0.00036384663647302817,
+      "ops_per_sec": 73796.61475769822,
+      "total_iterations": 1000
+    },
+    "Snapshot - Save/Restore": {
+      "avg_time_ms": 0.029060241940896958,
+      "min_time_ms": 0.02845900598913431,
+      "max_time_ms": 0.03883300814777613,
+      "std_dev_ms": 0.0005014358139607885,
+      "ops_per_sec": 34411.27579164038,
+      "total_iterations": 1000
+    },
+    "Adaptive Budgets - Track Usage": {
+      "avg_time_ms": 0.014597247180063277,
+      "min_time_ms": 0.013999990187585354,
+      "max_time_ms": 0.01775001874193549,
+      "std_dev_ms": 0.0004898910667885767,
+      "ops_per_sec": 68506.0674567316,
+      "total_iterations": 1000
+    }
+  }
+}

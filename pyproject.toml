@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "antaris-flame"
+version = "1.0.0"
+description = "Antaris Flame — memory, safety, and context for AI agent bots (5,000 memory tier)"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Antaris Analytics", email = "moro@antarisanalytics.ai"}
+]
+keywords = ["ai", "memory", "agent", "flame", "llm", "safety"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "antaris-memory~=4.0",
+    "antaris-guard~=4.0",
+    "antaris-context~=4.0",
+]
+
+[project.optional-dependencies]
+semantic = ["sentence-transformers>=2.2.0"]
+dev = ["pytest>=7.0", "pytest-xdist"]
+
+[project.urls]
+Homepage = "https://antarisanalytics.ai"
+Repository = "https://github.com/Antaris-Analytics-LLC/antaris-flame"
+Documentation = "https://docs.antarisanalytics.ai"
+
+[tool.setuptools.packages.find]
+include = ["antaris_flame*"]

@@ -91,6 +91,7 @@ class MemorySystemV4(NamespaceManager):
         enable_semantic: bool = False,
         cooccurrence_boost_weight: float = 0.3,
         collection_endpoint: Optional[str] = None,
+        collection_api_key: Optional[str] = None,
     ):
         self.workspace = os.path.abspath(workspace)
         self.use_sharding = use_sharding
@@ -178,6 +179,7 @@ class MemorySystemV4(NamespaceManager):
             cooccurrence=self._cooccurrence,
             consent=self.consent,
             endpoint_url=collection_endpoint,
+            api_key=collection_api_key,
         )
         self._collection_agent.load_state()
 

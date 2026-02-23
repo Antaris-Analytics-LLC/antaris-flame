@@ -66,6 +66,7 @@ class CollectionAgent:
         cooccurrence: "CooccurrenceIndex",
         consent: "ConsentStore",
         endpoint_url: Optional[str] = None,
+        api_key: Optional[str] = None,
         top_n: int = _DEFAULT_TOP_N,
         noise_scale: float = _DEFAULT_NOISE_SCALE,
         min_count: int = _DEFAULT_MIN_COUNT,
@@ -74,7 +75,8 @@ class CollectionAgent:
         self.workspace = Path(workspace)
         self.cooccurrence = cooccurrence
         self.consent = consent
-        self.endpoint_url = endpoint_url  # None until Supabase is configured
+        self.endpoint_url = endpoint_url
+        self.api_key = api_key
         self.top_n = top_n
         self.noise_scale = noise_scale
         self.min_count = min_count
@@ -190,37 +192,69 @@ class CollectionAgent:
         }
 
     def transmit(self, payload: dict) -> bool:
-        """Transmit payload to the configured endpoint.
+        """Transmit word-pair payload to Supabase via RPC upsert.
 
-        Returns True on success, False on failure (stubbed when endpoint is None).
-
-        NOTE: Supabase endpoint transmission is NOT YET WIRED.
-              This method currently stubs the transmission and logs the payload
-              size. Wire self.endpoint_url when Supabase project is configured.
+        Calls /rest/v1/rpc/upsert_word_pairs with the anonymised pair counts.
+        Returns True on success, False on any failure.
+        Stubs silently when endpoint_url or api_key is not configured.
         """
-        if not self.endpoint_url:
-            # Stubbed: log what would be sent without transmitting
+        import urllib.request
+        import urllib.error
+
+        if not self.endpoint_url or not self.api_key:
             pair_count = len(payload.get("pairs", []))
             logger.debug(
-                "CollectionAgent: STUB — would transmit %d pairs (endpoint not configured)",
+                "CollectionAgent: STUB — would transmit %d pairs (endpoint/key not configured)",
                 pair_count,
             )
             return True  # Stub succeeds silently
 
-        # TODO: Wire Supabase endpoint here
-        # import urllib.request
-        # data = json.dumps(payload).encode("utf-8")
-        # req = urllib.request.Request(
-        #     self.endpoint_url,
-        #     data=data,
-        #     headers={"Content-Type": "application/json"},
-        #     method="POST",
-        # )
-        # with urllib.request.urlopen(req, timeout=10) as resp:
-        #     return resp.status == 200
+        rpc_url = self.endpoint_url.rstrip("/") + "/rest/v1/rpc/upsert_word_pairs"
+        rpc_payload = {
+            "pairs": [
+                {
+                    "a": p["a"],
+                    "b": p["b"],
+                    "count": p["count"],
+                    "noise_applied": p.get("noise_applied", True),
+                    "version": payload.get("version", "1.1"),
+                }
+                for p in payload.get("pairs", [])
+            ]
+        }
 
-        logger.warning("CollectionAgent: endpoint_url set but transmit() not yet wired")
-        return False
+        try:
+            data = json.dumps(rpc_payload).encode("utf-8")
+            req = urllib.request.Request(
+                rpc_url,
+                data=data,
+                headers={
+                    "Content-Type": "application/json",
+                    "apikey": self.api_key,
+                    "Authorization": f"Bearer {self.api_key}",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status in (200, 204):
+                    logger.info(
+                        "CollectionAgent: transmitted %d pairs to Supabase (HTTP %d)",
+                        len(rpc_payload["pairs"]),
+                        resp.status,
+                    )
+                    return True
+                logger.warning(
+                    "CollectionAgent: unexpected HTTP status %d from Supabase", resp.status
+                )
+                return False
+        except urllib.error.HTTPError as exc:
+            logger.error(
+                "CollectionAgent: HTTP error from Supabase: %d %s", exc.code, exc.reason
+            )
+            return False
+        except Exception as exc:
+            logger.error("CollectionAgent: transmission error: %s", exc)
+            return False
 
     def run_cycle(self) -> bool:
         """Run a single collection cycle if due and consented.

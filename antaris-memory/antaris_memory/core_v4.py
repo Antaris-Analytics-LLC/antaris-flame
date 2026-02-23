@@ -92,6 +92,7 @@ class MemorySystemV4(NamespaceManager):
         cooccurrence_boost_weight: float = 0.3,
         collection_endpoint: Optional[str] = None,
         collection_api_key: Optional[str] = None,
+        collection_opt_in: bool = False,
     ):
         self.workspace = os.path.abspath(workspace)
         self.use_sharding = use_sharding
@@ -174,6 +175,8 @@ class MemorySystemV4(NamespaceManager):
         from .collection import CollectionAgent
         self.consent = ConsentStore(workspace=self.workspace)
         self.consent.load()
+        if collection_opt_in and not self.consent.is_opted_in():
+            self.consent.opt_in()
         self._collection_agent = CollectionAgent(
             workspace=self.workspace,
             cooccurrence=self._cooccurrence,

@@ -22,8 +22,6 @@ antaris-flame is the mid-tier of the Antaris bot runtime — bundling persistent
 | **Flame** | 5,000 memories | `antaris-flame` |
 | Forge | 25,000 memories | `antaris-forge` |
 
-Upgrade path: `pip install antaris-forge` — drop-in replacement, no code changes.
-
 ## Quick Start
 
 ```python

@@ -60,7 +60,7 @@ async function sendToSupabase(pairs, log) {
         'apikey':        SUPABASE_KEY,
         'Authorization': `Bearer ${SUPABASE_KEY}`,
       },
-      body:   JSON.stringify({ pairs: noisedPairs, version: '1.1', noise_applied: true }),
+      body:   JSON.stringify({ pairs: noisedPairs }),
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) log.warn(`[${TIER}] collection send failed: ${res.status}`);

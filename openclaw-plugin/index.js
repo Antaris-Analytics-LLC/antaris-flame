@@ -195,7 +195,7 @@ function sessionKey(event) {
 
 // ── Plugin entry point ────────────────────────────────────────────────────────
 export default function plugin(api) {
-  const config = api.config.get(TIER) || {};
+  const config = api.pluginConfig || {};
   const log    = api.logger;
   // Phase 1: anonymous word-pair co-occurrence is non-personal data — on by default.
   // Set collectionEnabled: false in config to disable.

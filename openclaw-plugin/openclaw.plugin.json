@@ -2,18 +2,27 @@
   "id": "antaris-flame",
   "name": "Antaris Flame",
   "version": "1.0.0",
-  "kind": "memory",
   "description": "Antaris Flame — persistent memory for OpenClaw agents. 5,000 memory cap, 100-day lifespan, BM25 + co-occurrence semantic boost. Zero Python. Zero bridge.",
   "activation": "on-restart",
-  "hooks": ["session_start", "before_agent_start", "agent_end"],
+  "hooks": [
+    "session_start",
+    "before_agent_start",
+    "agent_end"
+  ],
   "uiHints": {
-    "memoryPath": { "label": "Memory Storage Path", "placeholder": "./antaris-flame-store", "help": "Where memories are stored on disk" }
+    "memoryPath": {
+      "label": "Memory Storage Path",
+      "placeholder": "./antaris-flame-store",
+      "help": "Where memories are stored on disk"
+    }
   },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "memoryPath": { "type": "string" }
+      "memoryPath": {
+        "type": "string"
+      }
     }
   }
 }

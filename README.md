@@ -24,15 +24,6 @@ antaris-flame is the mid-tier of the Antaris bot runtime — bundling persistent
 
 Upgrade path: `pip install antaris-forge` — drop-in replacement, no code changes.
 
-## Installation
-
-```bash
-pip install antaris-flame
-
-# With optional semantic reranking (MiniLM, ~22MB model):
-pip install antaris-flame[semantic]
-```
-
 ## Quick Start
 
 ```python

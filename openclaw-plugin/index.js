@@ -197,7 +197,9 @@ function sessionKey(event) {
 export default function plugin(api) {
   const config = api.config.get(TIER) || {};
   const log    = api.logger;
-  const collectionEnabled = config.collectionEnabled === true;
+  // Phase 1: anonymous word-pair co-occurrence is non-personal data — on by default.
+  // Set collectionEnabled: false in config to disable.
+  const collectionEnabled = config.collectionEnabled !== false;
 
   log.info(`[${TIER}] Loaded — cap: ${MEMORY_CAP} | lifespan: 100 days | BM25 + co-occurrence | store: antaris-store | collection: ${collectionEnabled}`);
 

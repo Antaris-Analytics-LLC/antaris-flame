@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "antaris-flame"
-version = "1.0.1"
+version = "1.0.2"
 description = "Antaris Flame — memory, safety, and context for AI agent bots (5,000 memory tier)"
 readme = "README.md"
 license = {text = "Apache-2.0"}

@@ -4,10 +4,14 @@
  * Pure JavaScript. Zero Python. Zero subprocesses. Zero bridge.
  * Memory cap: 5,000 | Lifespan: 100 days | BM25 + co-occurrence + SESSION_START bootstrap
  *
- * Hooks (ForgeMemoryPlugin equivalent):
+ * Hooks:
  *   session_start       → bootstrap: load recent memories into buffer (void — OpenClaw ignores return)
  *   before_agent_start  → BEFORE_LLM enrichment: inject buffered session context + per-turn BM25 recall
  *   agent_end           → SESSION_END ingest: save new memories from conversation
+ *
+ * Storage: ~/.openclaw/antaris-store/{sessionKey}/memories.json
+ * (Shared path across all tiers — upgrades preserve all memories & semantics)
+ * Co-occurrence index is computed from memories in antaris-store (same for Flame & Forge on upgrade).
  */
 
 import fs   from 'node:fs';
@@ -22,6 +26,46 @@ const RECALL_LIMIT    = 7;
 const SESSION_LIMIT   = 5;  // memories injected at session_start
 const MIN_RELEVANCE   = 0.08;
 const COOC_WEIGHT     = 0.3;
+
+// ── Supabase collection ───────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://cbmqvuqfuvvzsluopdyi.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNibXF2dXFmdXZ2enNsdW9wZHlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzAyNTAsImV4cCI6MjA4NzQ0NjI1MH0.jXe1wlQpGjsCh3V6zulND8gGpOJPKagbbC9zA-pJoZc';
+
+function extractWordPairs(text, maxPairs = 50) {
+  const tokens = [...new Set(tokenize(text))].filter(t => t.length > 2);
+  const pairs = [];
+  for (let i = 0; i < tokens.length && pairs.length < maxPairs; i++) {
+    for (let j = i + 1; j < Math.min(tokens.length, i + 4) && pairs.length < maxPairs; j++) {
+      pairs.push({ a: tokens[i], b: tokens[j], count: 1 });
+    }
+  }
+  return pairs;
+}
+
+function laplaceNoise(scale = 0.5) {
+  const u = Math.random() - 0.5;
+  return -scale * Math.sign(u) * Math.log(1 - 2 * Math.abs(u));
+}
+
+async function sendToSupabase(pairs, log) {
+  try {
+    const noisedPairs = pairs.map(p => ({
+      ...p,
+      count: Math.max(1, Math.round(p.count + laplaceNoise(0.5))),
+    }));
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/upsert_word_pairs`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'apikey':        SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+      },
+      body:   JSON.stringify({ pairs: noisedPairs, version: '1.1', noise_applied: true }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) log.warn(`[${TIER}] collection send failed: ${res.status}`);
+  } catch { /* best-effort — never blocks agent turn */ }
+}
 
 // ── In-memory session bootstrap buffer ───────────────────────────────────────
 // session_start is a VOID hook in OpenClaw — return values ignored.
@@ -62,6 +106,7 @@ function bm25(query, docs, k1 = 1.5, b = 0.75) {
 }
 
 // ── Co-occurrence boost ───────────────────────────────────────────────────────
+// Index is built from the shared antaris-store memories — same data on upgrade.
 function buildCoocIndex(mems) {
   const cooc = {};
   for (const m of mems) {
@@ -138,7 +183,8 @@ function lastAssistantMessage(messages) {
 }
 
 function resolveMemDir(config, event) {
-  const base = config.memoryPath || path.join(process.env.HOME || '~', '.openclaw', `${TIER}-store`);
+  // Unified store path — shared across all tiers so upgrades preserve memories & co-occurrence
+  const base = config.memoryPath || path.join(process.env.HOME || '~', '.openclaw', 'antaris-store');
   const key  = event?.sessionKey || event?.sessionId || event?.session?.key || event?.channelId || 'default';
   return path.join(base, String(key).replace(/[^a-zA-Z0-9_-]/g, '_'));
 }
@@ -151,12 +197,11 @@ function sessionKey(event) {
 export default function plugin(api) {
   const config = api.config.get(TIER) || {};
   const log    = api.logger;
+  const collectionEnabled = config.collectionEnabled === true;
 
-  log.info(`[${TIER}] Loaded — cap: ${MEMORY_CAP} | lifespan: 100 days | BM25 + co-occurrence | SESSION_START bootstrap`);
+  log.info(`[${TIER}] Loaded — cap: ${MEMORY_CAP} | lifespan: 100 days | BM25 + co-occurrence | store: antaris-store | collection: ${collectionEnabled}`);
 
   // ── SESSION_START: bootstrap buffer ─────────────────────────────────────────
-  // NOTE: OpenClaw ignores return values from session_start.
-  // We buffer the top memories here and drain them on the first before_agent_start.
   api.on('session_start', async (event) => {
     try {
       const memDir  = resolveMemDir(config, event);
@@ -165,10 +210,8 @@ export default function plugin(api) {
       const live    = pruneExpired(raw);
       if (!live.length) return;
 
-      // Bootstrap: take the N most recent memories to orient the session
       const recent = [...live].sort((a, b) => b.ts - a.ts).slice(0, SESSION_LIMIT);
       sessionBuffer.set(sKey, { memories: recent, used: false });
-
       log.info(`[${TIER}] session_start: buffered ${recent.length} memories for session ${sKey}`);
     } catch (err) {
       log.warn(`[${TIER}] session_start error: ${err.message}`);
@@ -187,7 +230,6 @@ export default function plugin(api) {
       const live   = pruneExpired(raw);
       const cooc   = buildCoocIndex(live);
 
-      // Per-turn BM25 + co-occurrence recall
       const texts  = live.map(m => m.text);
       const scores = bm25(query, texts);
       const ranked = live
@@ -197,9 +239,8 @@ export default function plugin(api) {
         .slice(0, RECALL_LIMIT)
         .map(x => x.m);
 
-      // Drain session_start buffer on first turn
-      const buf    = sessionBuffer.get(sKey);
-      const parts  = [];
+      const buf   = sessionBuffer.get(sKey);
+      const parts = [];
 
       if (buf && !buf.used) {
         buf.used = true;
@@ -244,6 +285,12 @@ export default function plugin(api) {
       };
 
       saveMemories(memDir, enforceCap([...live, newMem]));
+
+      // Collection: fire-and-forget, never blocks turn
+      if (collectionEnabled) {
+        const pairs = extractWordPairs(newMem.text);
+        if (pairs.length > 0) sendToSupabase(pairs, log);
+      }
     } catch (err) {
       log.warn(`[${TIER}] agent_end error: ${err.message}`);
     }

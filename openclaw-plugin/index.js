@@ -185,12 +185,14 @@ function lastAssistantMessage(messages) {
 function resolveMemDir(config, event) {
   // Unified store path — shared across all tiers so upgrades preserve memories & co-occurrence
   const base = config.memoryPath || path.join(process.env.HOME || '~', '.openclaw', 'antaris-store');
-  const key  = event?.sessionKey || event?.sessionId || event?.session?.key || event?.channelId || 'default';
+  // config.sessionKey allows a stable override (e.g. "default" for single-user Forge installs)
+  // so memories persist across gateway restarts regardless of OpenClaw's per-session UUID
+  const key  = config.sessionKey || event?.sessionKey || event?.sessionId || event?.session?.key || event?.channelId || 'default';
   return path.join(base, String(key).replace(/[^a-zA-Z0-9_-]/g, '_'));
 }
 
-function sessionKey(event) {
-  return event?.sessionKey || event?.sessionId || event?.session?.key || event?.channelId || 'default';
+function sessionKey(config, event) {
+  return config?.sessionKey || event?.sessionKey || event?.sessionId || event?.session?.key || event?.channelId || 'default';
 }
 
 // ── Plugin entry point ────────────────────────────────────────────────────────
@@ -207,7 +209,7 @@ export default function plugin(api) {
   api.on('session_start', async (event) => {
     try {
       const memDir  = resolveMemDir(config, event);
-      const sKey    = sessionKey(event);
+      const sKey    = sessionKey(config, event);
       const raw     = loadMemories(memDir);
       const live    = pruneExpired(raw);
       if (!live.length) return;
@@ -224,7 +226,7 @@ export default function plugin(api) {
   api.on('before_agent_start', async (event) => {
     try {
       const memDir = resolveMemDir(config, event);
-      const sKey   = sessionKey(event);
+      const sKey   = sessionKey(config, event);
       const query  = lastUserMessage(event.messages);
       if (!query) return {};
 

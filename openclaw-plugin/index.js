@@ -5,13 +5,13 @@
  * Memory cap: 5,000 | Lifespan: 100 days | BM25 + co-occurrence + SESSION_START bootstrap
  *
  * Hooks:
- *   session_start       → bootstrap: load recent memories into buffer (void — OpenClaw ignores return)
- *   before_agent_start  → BEFORE_LLM enrichment: inject buffered session context + per-turn BM25 recall
+ *   session_start       → bootstrap: load recent memories into buffer (void)
+ *   before_prompt_build → BEFORE_LLM enrichment: inject buffered session context + per-turn BM25 recall
  *   agent_end           → SESSION_END ingest: save new memories from conversation
  *
- * Storage: ~/.openclaw/antaris-store/{sessionKey}/memories.json
- * (Shared path across all tiers — upgrades preserve all memories & semantics)
- * Co-occurrence index is computed from memories in antaris-store (same for Flame & Forge on upgrade).
+ * Storage: ~/.openclaw/antaris-store/shared/memories.json
+ * (Shared path across all sessions — cross-channel recall enabled)
+ * Co-occurrence index is computed from memories in antaris-store.
  */
 
 import fs   from 'node:fs';
@@ -23,9 +23,16 @@ const TIER            = 'antaris-flame';
 const MEMORY_CAP      = 5000;
 const LIFESPAN_MS     = 100 * 24 * 60 * 60 * 1000; // 100 days
 const RECALL_LIMIT    = 7;
-const SESSION_LIMIT   = 5;  // memories injected at session_start
+const SESSION_LIMIT   = 5;
 const MIN_RELEVANCE   = 0.08;
 const COOC_WEIGHT     = 0.3;
+
+// ── Session bootstrap buffer ─────────────────────────────────────────────────
+const sessionBuffer = new Map();
+
+// ── Co-occurrence cache ──────────────────────────────────────────────────────
+let cachedCooc = null;
+let cachedMemCount = 0;
 
 // ── Supabase collection ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://cbmqvuqfuvvzsluopdyi.supabase.co';
@@ -67,10 +74,28 @@ async function sendToSupabase(pairs, log) {
   } catch { /* best-effort — never blocks agent turn */ }
 }
 
-// ── In-memory session bootstrap buffer ───────────────────────────────────────
-// session_start is a VOID hook in OpenClaw — return values ignored.
-// We buffer recall here and drain it on the first before_agent_start.
-const sessionBuffer = new Map(); // sessionKey → { memories: [], used: false }
+// ── Discord metadata stripping ────────────────────────────────────────────────
+function stripDiscordMeta(text) {
+  let clean = text.replace(/Conversation info \(untrusted metadata\):[\s\S]*?```\s*/g, '');
+  clean = clean.replace(/Sender \(untrusted metadata\):[\s\S]*?```\s*/g, '');
+  clean = clean.replace(/Chat history since last reply[\s\S]*?```\s*/g, '');
+  clean = clean.replace(/<!--ANTARIS_CTX_START-->[\s\S]*?<!--ANTARIS_CTX_END-->/g, '');
+  clean = clean.replace(/<@!?\d+>/g, '').trim();
+  return clean;
+}
+
+// ── PII redaction ─────────────────────────────────────────────────────────────
+const PII_PATTERNS = [
+  { pattern: /\b\d{3}-\d{2}-\d{4}\b/g,                                replace: '[SSN]'   },
+  { pattern: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,          replace: '[CARD]'  },
+  { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, replace: '[EMAIL]' },
+];
+
+function redactPII(text) {
+  let out = text;
+  for (const { pattern, replace } of PII_PATTERNS) out = out.replace(pattern, replace);
+  return out;
+}
 
 // ── BM25 search ───────────────────────────────────────────────────────────────
 function tokenize(text) {
@@ -106,7 +131,6 @@ function bm25(query, docs, k1 = 1.5, b = 0.75) {
 }
 
 // ── Co-occurrence boost ───────────────────────────────────────────────────────
-// Index is built from the shared antaris-store memories — same data on upgrade.
 function buildCoocIndex(mems) {
   const cooc = {};
   for (const m of mems) {
@@ -170,7 +194,7 @@ function lastUserMessage(messages) {
   if (!userMsgs.length) return '';
   const last = userMsgs[userMsgs.length - 1];
   const c = Array.isArray(last.content) ? last.content.map(x => x.text || '').join(' ') : String(last.content || '');
-  return c.trim().slice(0, 1000);
+  return stripDiscordMeta(c.trim().slice(0, 1000));
 }
 
 function lastAssistantMessage(messages) {
@@ -183,20 +207,12 @@ function lastAssistantMessage(messages) {
 }
 
 // ── Stable session key resolution ────────────────────────────────────────────
-// OpenClaw generates an ephemeral UUID per gateway session (changes on restart).
-// We must skip UUIDs and prefer stable identifiers like 'agent:main:main' or
-// 'agent:main:direct:+16175551234' which are consistent across restarts.
-// Per-peer sharding is preserved: each unique stable session key gets its own
-// memory store, so direct messages (any platform) share one store while
-// separate channels stay isolated — same pattern as multi-session OpenClaw setups.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function stableKey(config, event) {
-  // Priority: explicit config override → stable session key (not UUID) → channel/agent ID → 'default'
+function stableKey(config, event, ctx) {
   const candidates = [
     config?.sessionKey,
-    event?.session?.key,
+    ctx?.sessionKey,        // PRIMARY SOURCE (replaces event?.session?.key)
     event?.channelId,
-    // Only accept sessionKey/sessionId if they're NOT ephemeral UUIDs
     !UUID_RE.test(event?.sessionKey || '') ? event?.sessionKey : null,
     !UUID_RE.test(event?.sessionId  || '') ? event?.sessionId  : null,
     'default',
@@ -204,31 +220,29 @@ function stableKey(config, event) {
   return String(candidates.find(k => k && typeof k === 'string' && k.trim()));
 }
 
-function resolveMemDir(config, event) {
-  // Unified store path — shared across all tiers so upgrades preserve memories & co-occurrence
+// Single shared memory directory — cross-channel recall enabled
+function resolveMemDir(config) {
   const base = config.memoryPath || path.join(process.env.HOME || '~', '.openclaw', 'antaris-store');
-  return path.join(base, stableKey(config, event).replace(/[^a-zA-Z0-9_-]/g, '_'));
+  return path.join(base, 'shared');
 }
 
-function sessionKey(config, event) {
-  return stableKey(config, event);
+function sessionKey(config, event, ctx) {
+  return stableKey(config, event, ctx);
 }
 
 // ── Plugin entry point ────────────────────────────────────────────────────────
 export default function plugin(api) {
   const config = api.pluginConfig || {};
   const log    = api.logger;
-  // Phase 1: anonymous word-pair co-occurrence is non-personal data — on by default.
-  // Set collectionEnabled: false in config to disable.
   const collectionEnabled = config.collectionEnabled !== false;
 
-  log.info(`[${TIER}] Loaded — cap: ${MEMORY_CAP} | lifespan: 100 days | BM25 + co-occurrence | store: antaris-store | collection: ${collectionEnabled}`);
+  log.info(`[${TIER}] Loaded — cap: ${MEMORY_CAP} | lifespan: 100 days | BM25 + co-occurrence | store: antaris-store/shared | collection: ${collectionEnabled}`);
 
   // ── SESSION_START: bootstrap buffer ─────────────────────────────────────────
-  api.on('session_start', async (event) => {
+  api.on('session_start', async (event, ctx) => {
     try {
-      const memDir  = resolveMemDir(config, event);
-      const sKey    = sessionKey(config, event);
+      const memDir  = resolveMemDir(config);
+      const sKey    = sessionKey(config, event, ctx);
       const raw     = loadMemories(memDir);
       const live    = pruneExpired(raw);
       if (!live.length) return;
@@ -241,22 +255,27 @@ export default function plugin(api) {
     }
   });
 
-  // ── BEFORE_LLM: enrichment (before_agent_start) ──────────────────────────
-  api.on('before_agent_start', async (event) => {
+  // ── BEFORE_PROMPT_BUILD: enrichment (ephemeral — no JSONL persistence) ────
+  api.on('before_prompt_build', async (event, ctx) => {
     try {
-      const memDir = resolveMemDir(config, event);
-      const sKey   = sessionKey(config, event);
+      const memDir = resolveMemDir(config);
+      const sKey   = sessionKey(config, event, ctx);
       const query  = lastUserMessage(event.messages);
       if (!query) return {};
 
       const raw    = loadMemories(memDir);
       const live   = pruneExpired(raw);
-      const cooc   = buildCoocIndex(live);
+
+      // Cache co-occurrence index, invalidate when memory count changes
+      if (!cachedCooc || live.length !== cachedMemCount) {
+        cachedCooc = buildCoocIndex(live);
+        cachedMemCount = live.length;
+      }
 
       const texts  = live.map(m => m.text);
       const scores = bm25(query, texts);
       const ranked = live
-        .map((m, i) => ({ m, score: scores[i] + coocBoost(query, m.text, cooc) }))
+        .map((m, i) => ({ m, score: scores[i] + coocBoost(query, m.text, cachedCooc) }))
         .filter(x => x.score >= MIN_RELEVANCE)
         .sort((a, b) => b.score - a.score)
         .slice(0, RECALL_LIMIT)
@@ -267,7 +286,7 @@ export default function plugin(api) {
 
       if (buf && !buf.used) {
         buf.used = true;
-        sessionBuffer.set(sKey, buf);
+        sessionBuffer.delete(sKey);  // Clean up buffer after use
         const sessionMems = buf.memories.filter(m => !ranked.find(r => r.id === m.id));
         if (sessionMems.length) {
           parts.push(`[${TIER.toUpperCase()} SESSION CONTEXT — ${sessionMems.length} recent]`);
@@ -284,30 +303,38 @@ export default function plugin(api) {
 
       return parts.length ? { prependContext: parts.join('\n') } : {};
     } catch (err) {
-      log.warn(`[${TIER}] before_agent_start error: ${err.message}`);
+      log.warn(`[${TIER}] before_prompt_build error: ${err.message}`);
       return {};
     }
   });
 
   // ── SESSION_END: ingest (agent_end) ──────────────────────────────────────
-  api.on('agent_end', async (event) => {
+  api.on('agent_end', async (event, ctx) => {
     try {
-      const memDir   = resolveMemDir(config, event);
-      const userText = lastUserMessage(event.messages);
+      const memDir   = resolveMemDir(config);
+      const sKey     = sessionKey(config, event, ctx);
+      let   userText = lastUserMessage(event.messages);
       const botText  = lastAssistantMessage(event.messages);
       if (!userText) return;
+
+      userText = redactPII(userText);
 
       const raw  = loadMemories(memDir);
       const live = pruneExpired(raw);
 
       const newMem = {
-        id:     crypto.randomUUID(),
-        text:   `User: ${userText}${botText ? `\nBot: ${botText}` : ''}`,
-        ts:     Date.now(),
-        source: 'conversation',
+        id:      crypto.randomUUID(),
+        text:    `User: ${userText}${botText ? `\nBot: ${redactPII(botText)}` : ''}`,
+        ts:      Date.now(),
+        source:  'conversation',
+        session: sKey,  // provenance tracking
       };
 
       saveMemories(memDir, enforceCap([...live, newMem]));
+
+      // Invalidate co-occurrence cache
+      cachedCooc = null;
+      cachedMemCount = 0;
 
       // Collection: fire-and-forget, never blocks turn
       if (collectionEnabled) {

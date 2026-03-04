@@ -82,6 +82,8 @@ function stripDiscordMeta(text) {
   clean = clean.replace(/Sender \(untrusted metadata\):[\s\S]*?```\s*/g, '');
   clean = clean.replace(/Chat history since last reply[\s\S]*?```\s*/g, '');
   clean = clean.replace(/<!--ANTARIS_CTX_START-->[\s\S]*?<!--ANTARIS_CTX_END-->/g, '');
+  // Strip own injection blocks (prevents recursive meta-memories)
+  clean = clean.replace(/\[ANTARIS-(?:SPARK|FLAME|FORGE)[^\]]*\][\s\S]*?(?=\n\n|$)/g, '');
   clean = clean.replace(/<@!?\d+>/g, '').trim();
   return clean;
 }

@@ -14,7 +14,7 @@ Install:
     pip install antaris-flame[semantic]  # + transformer embeddings
 """
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 
 MEMORY_CAP = 5000
 

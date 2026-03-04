@@ -182,17 +182,36 @@ function lastAssistantMessage(messages) {
   return c.trim().slice(0, 500);
 }
 
+// ── Stable session key resolution ────────────────────────────────────────────
+// OpenClaw generates an ephemeral UUID per gateway session (changes on restart).
+// We must skip UUIDs and prefer stable identifiers like 'agent:main:main' or
+// 'agent:main:direct:+16175551234' which are consistent across restarts.
+// Per-peer sharding is preserved: each unique stable session key gets its own
+// memory store, so direct messages (any platform) share one store while
+// separate channels stay isolated — same pattern as multi-session OpenClaw setups.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function stableKey(config, event) {
+  // Priority: explicit config override → stable session key (not UUID) → channel/agent ID → 'default'
+  const candidates = [
+    config?.sessionKey,
+    event?.session?.key,
+    event?.channelId,
+    // Only accept sessionKey/sessionId if they're NOT ephemeral UUIDs
+    !UUID_RE.test(event?.sessionKey || '') ? event?.sessionKey : null,
+    !UUID_RE.test(event?.sessionId  || '') ? event?.sessionId  : null,
+    'default',
+  ];
+  return String(candidates.find(k => k && typeof k === 'string' && k.trim()));
+}
+
 function resolveMemDir(config, event) {
   // Unified store path — shared across all tiers so upgrades preserve memories & co-occurrence
   const base = config.memoryPath || path.join(process.env.HOME || '~', '.openclaw', 'antaris-store');
-  // config.sessionKey allows a stable override (e.g. "default" for single-user Forge installs)
-  // so memories persist across gateway restarts regardless of OpenClaw's per-session UUID
-  const key  = config.sessionKey || event?.sessionKey || event?.sessionId || event?.session?.key || event?.channelId || 'default';
-  return path.join(base, String(key).replace(/[^a-zA-Z0-9_-]/g, '_'));
+  return path.join(base, stableKey(config, event).replace(/[^a-zA-Z0-9_-]/g, '_'));
 }
 
 function sessionKey(config, event) {
-  return config?.sessionKey || event?.sessionKey || event?.sessionId || event?.session?.key || event?.channelId || 'default';
+  return stableKey(config, event);
 }
 
 // ── Plugin entry point ────────────────────────────────────────────────────────

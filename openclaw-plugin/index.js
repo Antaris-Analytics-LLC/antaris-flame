@@ -16,6 +16,7 @@
 
 import fs   from 'node:fs';
 import path from 'node:path';
+import os   from 'node:os';
 import crypto from 'node:crypto';
 
 // ── Tier constants ────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ const sessionBuffer = new Map();
 // ── Co-occurrence cache ──────────────────────────────────────────────────────
 let cachedCooc = null;
 let cachedMemCount = 0;
+let memCache = { data: null, mtimeMs: 0, memDir: null };
 
 // ── Supabase collection ───────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://cbmqvuqfuvvzsluopdyi.supabase.co';
@@ -89,6 +91,7 @@ const PII_PATTERNS = [
   { pattern: /\b\d{3}-\d{2}-\d{4}\b/g,                                replace: '[SSN]'   },
   { pattern: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,          replace: '[CARD]'  },
   { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, replace: '[EMAIL]' },
+  { pattern: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, replace: '[PHONE]' },
 ];
 
 function redactPII(text) {
@@ -168,14 +171,36 @@ function loadMemories(memDir) {
     fs.mkdirSync(memDir, { recursive: true });
     const p = storePath(memDir);
     if (!fs.existsSync(p)) return [];
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
-  } catch { return []; }
+    const stat = fs.statSync(p);
+    if (memCache.memDir === memDir && memCache.mtimeMs >= stat.mtimeMs && memCache.data) {
+      return memCache.data;
+    }
+    const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+    memCache = { data, mtimeMs: stat.mtimeMs, memDir };
+    return data;
+  } catch {
+    try {
+      const bak = storePath(memDir) + '.bak';
+      if (fs.existsSync(bak)) {
+        const data = JSON.parse(fs.readFileSync(bak, 'utf8'));
+        memCache = { data, mtimeMs: Date.now(), memDir };
+        return data;
+      }
+    } catch { /* backup also corrupt */ }
+    return [];
+  }
 }
 
 function saveMemories(memDir, mems) {
   try {
     fs.mkdirSync(memDir, { recursive: true });
-    fs.writeFileSync(storePath(memDir), JSON.stringify(mems, null, 2));
+    const p = storePath(memDir);
+    const tmp = p + '.tmp';
+    const bak = p + '.bak';
+    fs.writeFileSync(tmp, JSON.stringify(mems, null, 2));
+    if (fs.existsSync(p)) fs.copyFileSync(p, bak);
+    fs.renameSync(tmp, p);
+    memCache = { data: mems, mtimeMs: Date.now(), memDir };
   } catch { /* non-fatal */ }
 }
 
@@ -194,7 +219,7 @@ function lastUserMessage(messages) {
   if (!userMsgs.length) return '';
   const last = userMsgs[userMsgs.length - 1];
   const c = Array.isArray(last.content) ? last.content.map(x => x.text || '').join(' ') : String(last.content || '');
-  return stripDiscordMeta(c.trim().slice(0, 1000));
+  return stripDiscordMeta(c.trim()).slice(0, 1000);
 }
 
 function lastAssistantMessage(messages) {
@@ -222,7 +247,7 @@ function stableKey(config, event, ctx) {
 
 // Single shared memory directory — cross-channel recall enabled
 function resolveMemDir(config) {
-  const base = config.memoryPath || path.join(process.env.HOME || '~', '.openclaw', 'antaris-store');
+  const base = config.memoryPath || path.join(os.homedir(), '.openclaw', 'antaris-store');
   return path.join(base, 'shared');
 }
 
@@ -331,10 +356,6 @@ export default function plugin(api) {
       };
 
       saveMemories(memDir, enforceCap([...live, newMem]));
-
-      // Invalidate co-occurrence cache
-      cachedCooc = null;
-      cachedMemCount = 0;
 
       // Collection: fire-and-forget, never blocks turn
       if (collectionEnabled) {

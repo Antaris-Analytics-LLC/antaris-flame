@@ -361,6 +361,9 @@ export default function plugin(api) {
         parts.push('');
       }
 
+      if (parts.length) {
+        parts.push(`[/${TIER.toUpperCase()}]`);  // closing delimiter for cleanHistoryUserText
+      }
       return parts.length ? { prependContext: parts.join('\n') } : {};
     } catch (err) {
       log.warn(`[${TIER}] before_prompt_build error: ${err.message}`);

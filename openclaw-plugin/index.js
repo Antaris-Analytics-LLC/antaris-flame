@@ -82,8 +82,22 @@ function stripDiscordMeta(text) {
   clean = clean.replace(/Sender \(untrusted metadata\):[\s\S]*?```\s*/g, '');
   clean = clean.replace(/Chat history since last reply[\s\S]*?```\s*/g, '');
   clean = clean.replace(/<!--ANTARIS_CTX_START-->[\s\S]*?<!--ANTARIS_CTX_END-->/g, '');
-  // Strip own injection blocks (prevents recursive meta-memories)
-  clean = clean.replace(/\[ANTARIS-(?:SPARK|FLAME|FORGE)[^\]]*\][\s\S]*?(?=\n\n|\[ANTARIS-|$)/g, '');
+  // Strip injection blocks — use "last Bot:" anchor to find actual user message
+  if (/\[ANTARIS-(?:SPARK|FLAME|FORGE)/i.test(clean)) {
+    // Find the last "Bot: " line in the injection block — user message follows it
+    const lines = clean.split('\n');
+    let lastBotIdx = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*Bot:\s/.test(lines[i])) lastBotIdx = i;
+    }
+    if (lastBotIdx >= 0 && lastBotIdx < lines.length - 1) {
+      // Everything after the last Bot: line is the actual user message
+      clean = lines.slice(lastBotIdx + 1).join('\n').trim();
+    } else {
+      // Fallback: strip the header and numbered entries
+      clean = clean.replace(/\[ANTARIS-(?:SPARK|FLAME|FORGE)[^\]]*\][\s\S]*?(?=\n\n|\[ANTARIS-|$)/g, '');
+    }
+  }
   clean = clean.replace(/<@!?\d+>/g, '').trim();
   return clean;
 }

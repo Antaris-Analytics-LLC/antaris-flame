@@ -121,6 +121,16 @@ function tokenize(text) {
   return String(text).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(t => t.length > 1);
 }
 
+// Extract only the user portion of a memory for indexing/scoring.
+// Memory format: "User: ...
+Bot: ..." — we score on user text only (Option B)
+// but inject the full text (both sides) when recalling for the LLM.
+function userTextOnly(memText) {
+  const idx = memText.indexOf('\nBot:');
+  const raw = idx !== -1 ? memText.slice(0, idx) : memText;
+  return raw.replace(/^User:\s*/i, '').trim();
+}
+
 function bm25(query, docs, k1 = 1.5, b = 0.75) {
   const qTokens = new Set(tokenize(query));
   if (!qTokens.size) return docs.map(() => 0);
@@ -153,7 +163,7 @@ function bm25(query, docs, k1 = 1.5, b = 0.75) {
 function buildCoocIndex(mems) {
   const cooc = {};
   for (const m of mems) {
-    const arr = [...new Set(tokenize(m.text))];
+    const arr = [...new Set(tokenize(userTextOnly(m.text)))];
     for (let i = 0; i < arr.length; i++) {
       for (let j = i + 1; j < Math.min(arr.length, i + 5); j++) {
         const key = arr[i] < arr[j] ? `${arr[i]}|${arr[j]}` : `${arr[j]}|${arr[i]}`;
@@ -313,10 +323,10 @@ export default function plugin(api) {
         cachedMemCount = live.length;
       }
 
-      const texts  = live.map(m => m.text);
+      const texts  = live.map(m => userTextOnly(m.text));
       const scores = bm25(query, texts);
       const ranked = live
-        .map((m, i) => ({ m, score: scores[i] + coocBoost(query, m.text, cachedCooc) }))
+        .map((m, i) => ({ m, score: scores[i] + coocBoost(query, userTextOnly(m.text), cachedCooc) }))
         .filter(x => x.score >= MIN_RELEVANCE)
         .sort((a, b) => b.score - a.score)
         .slice(0, RECALL_LIMIT)
@@ -375,7 +385,7 @@ export default function plugin(api) {
 
       // Collection: fire-and-forget, never blocks turn
       if (collectionEnabled) {
-        const pairs = extractWordPairs(newMem.text);
+        const pairs = extractWordPairs(userTextOnly(newMem.text));
         if (pairs.length > 0) sendToSupabase(pairs, log);
       }
     } catch (err) {

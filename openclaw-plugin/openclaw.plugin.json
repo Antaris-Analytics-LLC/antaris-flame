@@ -1,7 +1,7 @@
 {
   "id": "antaris-flame",
   "name": "Antaris Flame",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Antaris Flame \u2014 persistent memory for OpenClaw agents. 5,000 memory cap, 100-day lifespan, BM25 + co-occurrence semantic boost. Zero Python. Zero bridge.",
   "activation": "on-restart",
   "hooks": [

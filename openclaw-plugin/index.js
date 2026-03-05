@@ -122,8 +122,7 @@ function tokenize(text) {
 }
 
 // Extract only the user portion of a memory for indexing/scoring.
-// Memory format: "User: ...
-Bot: ..." — we score on user text only (Option B)
+// Memory format: "User: ...\nBot: ..." — score on user text only (Option B)
 // but inject the full text (both sides) when recalling for the LLM.
 function userTextOnly(memText) {
   const idx = memText.indexOf('\nBot:');

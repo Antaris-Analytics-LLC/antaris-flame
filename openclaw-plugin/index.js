@@ -25,7 +25,7 @@ const MEMORY_CAP      = 5000;
 const LIFESPAN_MS     = 100 * 24 * 60 * 60 * 1000; // 100 days
 const RECALL_LIMIT    = 7;
 const SESSION_LIMIT   = 5;
-const MIN_RELEVANCE   = 0.08;
+const MIN_RELEVANCE   = 1.0;
 const COOC_WEIGHT     = 0.3;
 
 // ── Session bootstrap buffer ─────────────────────────────────────────────────
@@ -330,9 +330,13 @@ export default function plugin(api) {
 
       const texts  = live.map(m => userTextOnly(m.text));
       const scores = bm25(query, texts);
-      const ranked = live
-        .map((m, i) => ({ m, score: scores[i] + coocBoost(query, userTextOnly(m.text), cachedCooc) }))
-        .filter(x => x.score >= MIN_RELEVANCE)
+
+      const combined = live.map((m, i) => ({ m, score: scores[i] + coocBoost(query, userTextOnly(m.text), cachedCooc) }));
+      const topScore = combined.reduce((max, x) => Math.max(max, x.score), 0);
+      const cutoff   = Math.max(MIN_RELEVANCE, topScore * 0.15);
+
+      const ranked = combined
+        .filter(x => x.score >= cutoff)
         .sort((a, b) => b.score - a.score)
         .slice(0, RECALL_LIMIT)
         .map(x => x.m);

@@ -62,14 +62,14 @@ async function sendToSupabase(pairs, log) {
       ...p,
       count: Math.max(1, Math.round(p.count + laplaceNoise(0.5))),
     }));
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/upsert_word_pairs`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/upsert_word_pairs_full`, {
       method:  'POST',
       headers: {
         'Content-Type':  'application/json',
         'apikey':        SUPABASE_KEY,
         'Authorization': `Bearer ${SUPABASE_KEY}`,
       },
-      body:   JSON.stringify({ pairs: noisedPairs }),
+      body:   JSON.stringify({ pairs: noisedPairs, noise_applied: true }),
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) log.warn(`[${TIER}] collection send failed: ${res.status}`);

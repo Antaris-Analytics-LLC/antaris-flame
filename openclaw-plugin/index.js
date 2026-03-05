@@ -98,6 +98,12 @@ function stripDiscordMeta(text) {
       clean = clean.replace(/\[ANTARIS-(?:SPARK|FLAME|FORGE)[^\]]*\][\s\S]*?(?=\n\n|\[ANTARIS-|$)/g, '');
     }
   }
+  // Strip OpenClaw timestamp prefix: everything before [Day YYYY-MM-DD HH:MM TZ] is
+  // prepended context (tool status, media refs, etc). The timestamp marks the actual user message.
+  const tsMatch = clean.match(/\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?:\s+\w+)?\]/);
+  if (tsMatch) {
+    clean = clean.slice(clean.indexOf(tsMatch[0]) + tsMatch[0].length).trim();
+  }
   clean = clean.replace(/<@!?\d+>/g, '').trim();
   return clean;
 }
